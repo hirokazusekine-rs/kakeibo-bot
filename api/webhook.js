@@ -73,4 +73,56 @@ async function handleMessage(event) {
     return;
   }
 
-  const category = lin
+  const category = lines[0];
+  const amountStr = lines[1].replace(/[^0-9]/g, '');
+  const memo = lines[2] || '';
+
+  const validCategories = ['水道光熱費', '食費', '外食', 'その他'];
+  if (!validCategories.includes(category)) {
+    await client.replyMessage({
+      replyToken,
+      messages: [{ type: 'text', text: `⚠️ カテゴリが正しくありません。\n\n使用できるカテゴリ：\n${validCategories.join('、')}` }]
+    });
+    return;
+  }
+
+  const amount = parseInt(amountStr, 10);
+  if (isNaN(amount) || amount <= 0) {
+    await client.replyMessage({
+      replyToken,
+      messages: [{ type: 'text', text: '⚠️ 金額は正の数値で入力してください。\n例：1500' }]
+    });
+    return;
+  }
+
+  const userName = await getUserName(userId);
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+
+  await writeToSheet(now, userName, category, amount, memo);
+
+  await client.replyMessage({
+    replyToken,
+    messages: [{ type: 'text', text: `✅ 家計簿に記録しました！\n\n📅 ${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}\n👤 ${userName}\n🏷️ ${category}\n💴 ¥${amount.toLocaleString()}\n📝 ${memo || 'なし'}` }]
+  });
+}
+
+module.exports = async (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(200).json({ status: 'ok' });
+  }
+
+  try {
+    const events = req.body.events;
+    await Promise.all(
+      events.map(event => {
+        if (event.type === 'message' && event.message.type === 'text') {
+          return handleMessage(event);
+        }
+      })
+    );
+    res.status(200).json({ status: 'ok' });
+  } catch (err) {
+    console.error(err);
+    res.status(200).json({ status: 'error' });
+  }
+};
